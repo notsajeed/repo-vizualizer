@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Repo Visualizer</title>
+  <style>
+    /* ── reset + base ────────────────────────────────────── */
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#fff;--surface:#f8f8f8;--border:#a2a9b1;
+      --text:#202122;--muted:#54595d;--link:#0645ad;
+      --link-visited:#0b0080;--accent:#006400;
+      --warn:#ffd700;--font-body:'Linux Libertine',Georgia,'Times New Roman',serif;
+      --font-ui:sans-serif;--font-mono:'Courier New',Courier,monospace;
+    }
+    body{background:var(--bg);color:var(--text);font-family:var(--font-body);
+      font-size:14px;line-height:1.6;min-height:100vh;
+      display:flex;flex-direction:column;align-items:center;
+      padding:0 16px 80px}
+
+    /* ── wikipedia-style header ──────────────────────────── */
+    #top-bar{width:100%;max-width:1000px;border-bottom:1px solid var(--border);
+      padding:10px 0 8px;margin-bottom:20px;display:flex;
+      align-items:baseline;gap:16px}
+    #top-bar h1{font-family:var(--font-ui);font-size:13px;color:var(--muted);
+      font-weight:normal;white-space:nowrap}
+    #top-bar strong{color:var(--text);font-family:var(--font-ui)}
+
+    /* ── search ─────────────────────────────────────────── */
+    .search-wrap{display:flex;gap:6px;width:100%;max-width:600px;margin-bottom:28px}
+    .search-wrap input{flex:1;background:#fff;border:1px solid var(--border);
+      font-family:var(--font-ui);font-size:13px;padding:6px 10px;
+      outline:none;color:var(--text)}
+    .search-wrap input:focus{border-color:#0645ad;
+      box-shadow:0 0 0 2px rgba(6,69,173,.15)}
+    .search-wrap button{background:#f8f9fa;border:1px solid var(--border);
+      font-family:var(--font-ui);font-size:13px;padding:6px 14px;
+      cursor:pointer;color:var(--text);transition:background .15s}
+    .search-wrap button:hover{background:#e8eaed}
+    .search-wrap button:disabled{opacity:.5;cursor:not-allowed}
+
+    .container{width:100%;max-width:1000px}
+
+    /* ── article title ───────────────────────────────────── */
+    #article-title{font-family:var(--font-ui);font-size:28px;font-weight:normal;
+      border-bottom:1px solid var(--border);padding-bottom:4px;margin-bottom:16px;
+      display:none}
+
+    .error{background:#fee7e6;border:1px solid #d33;
+      font-family:var(--font-ui);font-size:13px;
+      padding:10px 14px;margin-bottom:16px;display:none;color:#d33}
+
+    /* ── infobox (repo meta) ─────────────────────────────── */
+    .infobox{float:right;clear:right;margin:0 0 16px 24px;
+      border:1px solid var(--border);background:#f8f9fa;
+      font-family:var(--font-ui);font-size:13px;width:260px}
+    .infobox-title{background:#cee0f2;text-align:center;
+      font-weight:bold;padding:6px 10px;border-bottom:1px solid var(--border)}
+    .infobox table{width:100%;border-collapse:collapse}
+    .infobox td{padding:4px 10px;vertical-align:top;border-top:1px solid #eee}
+    .infobox td:first-child{color:var(--muted);white-space:nowrap;padding-right:6px}
+    .infobox td:last-child{font-weight:500}
+    @media(max-width:600px){
+      .infobox{float:none;width:100%;margin:0 0 16px 0}
+    }
+
+    /* ── toc ─────────────────────────────────────────────── */
+    .toc{background:#f8f9fa;border:1px solid var(--border);
+      display:inline-block;padding:12px 18px;margin-bottom:18px;
+      font-family:var(--font-ui);font-size:13px;min-width:200px}
+    .toc-title{font-weight:bold;margin-bottom:6px;font-size:13px}
+    .toc ol{padding-left:20px}
+    .toc li{margin:2px 0}
+    .toc a{color:var(--link)}
+    .toc a:hover{text-decoration:underline}
+
+    /* ── section headings ────────────────────────────────── */
+    .sec-h{font-family:var(--font-ui);font-size:18px;font-weight:normal;
+      border-bottom:1px solid var(--border);padding-bottom:2px;
+      margin:22px 0 10px}
+
+    /* ── tabs (styled as wiki-style nav) ─────────────────── */
+    .tabs{display:flex;gap:0;margin-bottom:16px;
+      border-bottom:1px solid var(--border);font-family:var(--font-ui)}
+    .tab{background:var(--surface);border:1px solid var(--border);border-bottom:none;
+      color:var(--text);cursor:pointer;font-size:13px;padding:6px 16px;
+      margin-bottom:-1px;margin-right:2px;transition:background .1s}
+    .tab:hover{background:#e8eaed}
+    .tab.active{background:#fff;border-bottom-color:#fff;font-weight:bold;
+      color:var(--text)}
+
+    .panel{display:none}
+    .panel.active{display:block}
+
+    /* ── stats strip ─────────────────────────────────────── */
+    .stats{display:flex;gap:0;margin-bottom:18px;
+      border:1px solid var(--border);font-family:var(--font-ui);font-size:13px}
+    .stat{flex:1;padding:10px 14px;border-right:1px solid var(--border);text-align:center}
+    .stat:last-child{border-right:none}
+    .stat .lbl{color:var(--muted);font-size:11px;margin-bottom:2px}
+    .stat .val{font-size:18px;font-weight:bold;font-family:var(--font-mono)}
+    @media(max-width:600px){.stats{flex-wrap:wrap}
+      .stat{flex:0 0 50%;border-bottom:1px solid var(--border)}}
+
+    /* ── commit list ─────────────────────────────────────── */
+    .commit-table{width:100%;border-collapse:collapse;font-family:var(--font-ui);font-size:13px}
+    .commit-table th{background:#eaecf0;border:1px solid var(--border);
+      padding:6px 10px;text-align:left;font-weight:bold}
+    .commit-table td{border:1px solid var(--border);padding:6px 10px;
+      vertical-align:top}
+    .commit-table tr:nth-child(even) td{background:#f8f9fa}
+    .commit-table tr:hover td{background:#eaf3fb}
+    .sha-link{color:var(--link);font-family:var(--font-mono);font-size:12px;
+      text-decoration:none}
+    .sha-link:hover{text-decoration:underline}
+    .author-link{color:var(--link);text-decoration:none}
+    .author-link:hover{text-decoration:underline}
+    .msg-cell{max-width:400px;word-break:break-word}
+    .date-cell{color:var(--muted);white-space:nowrap;font-size:12px}
+
+    /* ── branch list ─────────────────────────────────────── */
+    .branch-table{width:100%;border-collapse:collapse;font-family:var(--font-ui);font-size:13px}
+    .branch-table th{background:#eaecf0;border:1px solid var(--border);
+      padding:6px 10px;text-align:left;font-weight:bold}
+    .branch-table td{border:1px solid var(--border);padding:6px 10px}
+    .branch-table tr:nth-child(even) td{background:#f8f9fa}
+    .branch-table tr:hover td{background:#eaf3fb}
+    .default-badge{background:#006400;color:#fff;font-size:10px;
+      padding:1px 6px;border-radius:2px;margin-left:6px}
+    .branch-link{color:var(--link);text-decoration:none}
+    .branch-link:hover{text-decoration:underline}
+
+    /* ── contributors ────────────────────────────────────── */
+    .contrib-table{width:100%;border-collapse:collapse;font-family:var(--font-ui);font-size:13px}
+    .contrib-table th{background:#eaecf0;border:1px solid var(--border);
+      padding:6px 10px;text-align:left;font-weight:bold}
+    .contrib-table td{border:1px solid var(--border);padding:6px 10px;
+      vertical-align:middle}
+    .contrib-table tr:nth-child(even) td{background:#f8f9fa}
+    .contrib-table tr:hover td{background:#eaf3fb}
+    .avatar{width:22px;height:22px;border-radius:50%;vertical-align:middle;
+      margin-right:6px;border:1px solid var(--border)}
+    .bar-bg{background:#eaecf0;height:6px;border-radius:2px;min-width:80px}
+    .bar-fill{background:#3680b0;height:6px;border-radius:2px}
+
+    /* ── FILE TREE SVG ───────────────────────────────────── */
+    #tree-panel{position:relative}
+    #tree-search{border:1px solid var(--border);padding:4px 8px;font-size:12px;
+      font-family:var(--font-ui);width:240px;margin-bottom:10px;display:block}
+    #tree-search:focus{outline:none;border-color:var(--link)}
+    .truncated-note{background:#fffbdd;border:1px solid #c0b000;
+      font-family:var(--font-ui);font-size:12px;padding:6px 10px;
+      margin-bottom:8px;display:none}
+    #tree-svg-wrap{border:1px solid var(--border);background:#fafafa;
+      overflow:auto;width:100%;max-height:600px}
+    #tree-svg a{text-decoration:none}
+    #tree-svg a:hover text{fill:#0645ad}
+
+    /* ── commit graph svg ────────────────────────────────── */
+    #commit-graph-wrap{border:1px solid var(--border);background:#fafafa;
+      overflow-x:auto;margin-bottom:16px}
+
+    .loading{text-align:center;color:var(--muted);padding:40px 0;
+      font-family:var(--font-ui);font-size:13px;display:none}
+    .empty{text-align:center;color:var(--muted);padding:40px 0;
+      font-family:var(--font-ui);font-size:13px}
+    .clearfix::after{content:'';display:table;clear:both}
+  </style>
+</head>
+<body>
+
+<div id="top-bar">
+  <h1><strong>Repo Visualizer</strong> — inspect any public GitHub repository</h1>
+</div>
+
+<div class="search-wrap">
+  <input type="text" id="repo-input"
+    placeholder="owner/repo   e.g. torvalds/linux" autocomplete="off"/>
+  <button id="search-btn" onclick="fetchRepo()">Go</button>
+</div>
+
+<div class="container" id="main" style="display:none">
+
+  <div class="error" id="error-box"></div>
+
+  <h1 id="article-title"></h1>
+
+  <div class="clearfix">
+    <!-- INFOBOX -->
+    <div class="infobox">
+      <div class="infobox-title">Repository info</div>
+      <table><tbody id="infobox-rows"></tbody></table>
+    </div>
+
+    <!-- TOC -->
+    <div class="toc">
+      <div class="toc-title">Contents</div>
+      <ol>
+        <li><a href="#sec-stats">Statistics</a></li>
+        <li><a href="#sec-tree">File tree</a></li>
+        <li><a href="#sec-commits">Commits</a></li>
+        <li><a href="#sec-branches">Branches</a></li>
+        <li><a href="#sec-contributors">Contributors</a></li>
+      </ol>
+    </div>
+
+    <p id="repo-desc" style="margin-bottom:16px;font-size:15px"></p>
+  </div>
+
+  <!-- STATS -->
+  <h2 class="sec-h" id="sec-stats">Statistics</h2>
+  <div class="stats">
+    <div class="stat"><div class="lbl">Stars</div><div class="val" id="s-stars">—</div></div>
+    <div class="stat"><div class="lbl">Forks</div><div class="val" id="s-forks">—</div></div>
+    <div class="stat"><div class="lbl">Open issues</div><div class="val" id="s-issues">—</div></div>
+    <div class="stat"><div class="lbl">Language</div><div class="val" id="s-lang" style="font-size:14px">—</div></div>
+  </div>
+
+  <!-- FILE TREE -->
+  <h2 class="sec-h" id="sec-tree">File tree graph</h2>
+  <div id="tree-panel">
+    <input type="text" id="tree-search" placeholder="Filter files and folders…" oninput="filterTree()"/>
+    <div class="truncated-note" id="truncated-note">⚠ Tree truncated at 300 nodes by GitHub API.</div>
+    <div id="tree-svg-wrap"><svg id="tree-svg"></svg></div>
+  </div>
+
+  <!-- COMMITS -->
+  <h2 class="sec-h" id="sec-commits">Commits <span id="commit-count" style="font-size:14px;color:var(--muted)"></span></h2>
+  <div id="commit-graph-wrap">
+    <svg id="commit-graph"></svg>
+  </div>
+  <table class="commit-table" id="commit-table">
+    <thead><tr><th>SHA</th><th>Message</th><th>Author</th><th>Date</th></tr></thead>
+    <tbody id="commit-tbody"></tbody>
+  </table>
+
+  <!-- BRANCHES -->
+  <h2 class="sec-h" id="sec-branches">Branches</h2>
+  <table class="branch-table" id="branch-table">
+    <thead><tr><th>Name</th><th>Link</th></tr></thead>
+    <tbody id="branch-tbody"></tbody>
+  </table>
+
+  <!-- CONTRIBUTORS -->
+  <h2 class="sec-h" id="sec-contributors">Contributors</h2>
+  <table class="contrib-table">
+    <thead><tr><th>#</th><th>User</th><th>Commits</th><th>Bar</th></tr></thead>
+    <tbody id="contrib-tbody"></tbody>
+  </table>
+
+  <div class="loading" id="loading">Loading…</div>
+
+</div>
+
+<script>
+var API = 'http://localhost:5000/api';
+var _repoInfo = null;
+
+/* ── utils ───────────────────────────────────────────── */
+function G(id){return document.getElementById(id);}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fmt(n){return n>=1000?(n/1000).toFixed(1)+'k':String(n);}
+function ago(d){
+  var days=Math.floor((Date.now()-new Date(d))/86400000);
+  if(days===0)return 'today';if(days<2)return '1d ago';
+  if(days<30)return days+'d ago';if(days<365)return Math.floor(days/30)+'mo ago';
+  return Math.floor(days/365)+'y ago';
+}
+function fmtDate(d){
+  if(!d)return '';
+  return new Date(d).toISOString().slice(0,10);
+}
+
+async function call(path){
+  var r = await fetch(API+path);
+  var data = await r.json();
+  if(!r.ok) throw new Error(data.error||'API error');
+  return data;
+}
+
+async function fetchRepo(){
+  var raw = G('repo-input').value.trim();
+  if(!raw)return;
+  var slug = raw.replace('https://github.com/','').replace(/\/$/,'');
+  if(slug.split('/').length!==2){
+    showError('Enter owner/repo');return;
+  }
+  clearError();
+  G('search-btn').disabled=true;
+  G('main').style.display='none';
+  G('loading').style.display='block';
+  try{
+    var results = await Promise.all([
+      call('/repo/info?repo='+slug),
+      call('/repo/commits?repo='+slug),
+      call('/repo/branches?repo='+slug),
+      call('/repo/contributors?repo='+slug),
+      call('/repo/tree?repo='+slug),
+    ]);
+    _repoInfo = results[0];
+    var commits=results[1], branches=results[2], contribs=results[3], treeData=results[4];
+    renderHeader(_repoInfo);
+    renderStats(_repoInfo);
+    renderCommits(commits, _repoInfo);
+    renderBranches(branches, _repoInfo);
+    renderContribs(contribs);
+    // Show DOM first so graph-wrap has real dimensions, then init canvas
+    G('main').style.display='block';
+    G('article-title').style.display='block';
+    setTimeout(function(){ buildGraph(treeData, _repoInfo); }, 50);
+  }catch(e){
+    showError(e.message||'Failed to fetch.');
+    G('main').style.display='block';
+  }finally{
+    G('loading').style.display='none';
+    G('search-btn').disabled=false;
+  }
+}
+
+function showError(msg){G('error-box').textContent=msg;G('error-box').style.display='block';}
+function clearError(){G('error-box').style.display='none';}
+
+/* ── header / infobox ────────────────────────────────── */
+function renderHeader(d){
+  G('article-title').textContent = d.name;
+  G('repo-desc').textContent = d.description||'';
+  var rows=[
+    ['Full name', '<a class="sha-link" href="'+esc(d.html_url)+'" target="_blank">'+esc(d.name)+'</a>'],
+    ['Language', esc(d.language||'N/A')],
+    ['Default branch', esc(d.default_branch)],
+    ['License', esc(d.license||'—')],
+    ['Created', fmtDate(d.created_at)],
+    ['Last updated', fmtDate(d.updated_at)],
+    ['Stars', fmt(d.stars)],
+    ['Forks', fmt(d.forks)],
+    ['Open issues', fmt(d.open_issues)],
+  ];
+  G('infobox-rows').innerHTML = rows.map(function(r){
+    return '<tr><td>'+r[0]+'</td><td>'+r[1]+'</td></tr>';
+  }).join('');
+}
+
+function renderStats(d){
+  G('s-stars').textContent=fmt(d.stars);
+  G('s-forks').textContent=fmt(d.forks);
+  G('s-issues').textContent=fmt(d.open_issues);
+  G('s-lang').textContent=d.language||'N/A';
+}
+
+/* ── commits ─────────────────────────────────────────── */
+function renderCommits(commits, info){
+  G('commit-count').textContent='(last '+commits.length+')';
+  // mini svg timeline
+  renderCommitSVG(commits, info);
+  // table
+  G('commit-tbody').innerHTML = commits.map(function(c){
+    var url=info.html_url+'/commit/'+c.sha;
+    var aurl='https://github.com/'+encodeURIComponent(c.author);
+    var msg=c.message.split('\n')[0];
+    if(msg.length>80)msg=msg.slice(0,78)+'…';
+    return '<tr>'
+      +'<td><a class="sha-link" href="'+url+'" target="_blank">'+c.sha.slice(0,7)+'</a></td>'
+      +'<td class="msg-cell">'+esc(msg)+'</td>'
+      +'<td><a class="author-link" href="'+aurl+'" target="_blank">'+esc(c.author)+'</a></td>'
+      +'<td class="date-cell">'+ago(c.date)+'</td>'
+      +'</tr>';
+  }).join('');
+}
+
+function renderCommitSVG(commits, info){
+  var H=80, W=960, R=6;
+  var n=commits.length;
+  if(!n)return;
+  var pad=40;
+  var step=(W-pad*2)/Math.max(n-1,1);
+  var cy=H/2;
+  var svg=G('commit-graph');
+  svg.setAttribute('viewBox','0 0 '+W+' '+H);
+  svg.setAttribute('width',W); svg.setAttribute('height',H);
+  svg.style.minWidth=W+'px';
+  var h='';
+  // spine
+  if(n>1){
+    h+='<line x1="'+pad+'" y1="'+cy+'" x2="'+(W-pad)+'" y2="'+cy+'"'
+      +' stroke="#ccc" stroke-width="1.5"/>';
+  }
+  commits.forEach(function(c,i){
+    var cx=pad+i*step;
+    var url=info.html_url+'/commit/'+c.sha;
+    var first=i===0;
+    h+='<a href="'+url+'" target="_blank">'
+      +'<circle cx="'+cx+'" cy="'+cy+'" r="'+R+'"'
+      +' fill="'+(first?'#3680b0':'#aaa')+'" stroke="'+(first?'#1a4a7a':'#888')+'" stroke-width="1.5"/>'
+      +'</a>';
+    // label every 5th
+    if(i%5===0||i===n-1){
+      h+='<text x="'+cx+'" y="'+(cy+R+14)+'" font-family="sans-serif" font-size="9"'
+        +' fill="#666" text-anchor="middle">'+c.sha.slice(0,5)+'</text>';
+    }
+  });
+  svg.innerHTML=h;
+}
+
+/* ── branches ────────────────────────────────────────── */
+function renderBranches(branches, info){
+  G('branch-tbody').innerHTML = branches.map(function(b){
+    var url=info.html_url+'/tree/'+encodeURIComponent(b.name);
+    var isDefault=b.name===info.default_branch;
+    return '<tr>'
+      +'<td>'
+      +esc(b.name)
+      +(isDefault?'<span class="default-badge">default</span>':'')
+      +'</td>'
+      +'<td><a class="branch-link" href="'+url+'" target="_blank">View on GitHub ↗</a></td>'
+      +'</tr>';
+  }).join('');
+}
+
+/* ── contributors ────────────────────────────────────── */
+function renderContribs(list){
+  var max=list.length?list[0].contributions:1;
+  G('contrib-tbody').innerHTML = list.map(function(c,i){
+    var pct=Math.round(c.contributions/max*100);
+    return '<tr>'
+      +'<td>'+(i+1)+'</td>'
+      +'<td><a class="author-link" href="'+c.profile+'" target="_blank">'
+      +'<img class="avatar" src="'+c.avatar+'" alt="'+esc(c.login)+'"/>'
+      +esc(c.login)+'</a></td>'
+      +'<td>'+c.contributions+'</td>'
+      +'<td><div class="bar-bg"><div class="bar-fill" style="width:'+pct+'%"></div></div></td>'
+      +'</tr>';
+  }).join('');
+}
+
+/* ══════════════════════════════════════════════════════
+   FILE TREE — STATIC SVG INDENTED TREE
+   ══════════════════════════════════════════════════════ */
+var _treeRoot = null;
+var _repoHtmlUrl = '';
+var _repoBranch = '';
+
+function buildGraph(treeData, info){
+  if(treeData.truncated) G('truncated-note').style.display='block';
+  else G('truncated-note').style.display='none';
+
+  _repoHtmlUrl = info.html_url;
+  _repoBranch  = info.default_branch;
+
+  // Build tree structure
+  var root = {name: info.name.split('/')[1]||info.name, type:'root', children:{}, path:''};
+  treeData.tree.forEach(function(item){
+    var parts = item.path.split('/');
+    var node = root;
+    for(var i=0;i<parts.length;i++){
+      var part = parts[i];
+      if(!node.children[part]){
+        node.children[part] = {
+          name: part,
+          type: i===parts.length-1 ? (item.type==='blob'?'file':'dir') : 'dir',
+          children: {},
+          path: parts.slice(0,i+1).join('/'),
+          size: item.size||0
+        };
+      }
+      node = node.children[part];
+    }
+  });
+  _treeRoot = root;
+  renderTreeSVG('');
+}
+
+function renderTreeSVG(filter){
+  var ROW=20, INDENT=18, PADX=10, PADY=8;
+  var rows=[];
+  function walk(node, depth){
+    var children=Object.values(node.children).sort(function(a,b){
+      if(a.type!=='file'&&b.type==='file')return -1;
+      if(a.type==='file'&&b.type!=='file')return 1;
+      return a.name.localeCompare(b.name);
+    });
+    children.forEach(function(ch){
+      if(filter&&ch.path.toLowerCase().indexOf(filter.toLowerCase())<0){
+        // still descend dirs in case children match
+        if(ch.type!=='file') walk(ch, depth+1);
+        return;
+      }
+      rows.push({node:ch, depth:depth});
+      if(ch.type!=='file') walk(ch, depth+1);
+    });
+  }
+  // root row
+  rows.push({node:_treeRoot, depth:0});
+  walk(_treeRoot, 1);
+
+  var maxLabelLen = 0;
+  rows.forEach(function(r){
+    var len = r.depth*INDENT + r.node.name.length*7.2 + 30;
+    if(len>maxLabelLen) maxLabelLen=len;
+  });
+  var W = Math.max(600, maxLabelLen + 40);
+  var H = rows.length*ROW + PADY*2;
+
+  var svg = G('tree-svg');
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+  svg.setAttribute('viewBox','0 0 '+W+' '+H);
+
+  var h = '';
+  rows.forEach(function(r,i){
+    var x = PADX + r.depth*INDENT;
+    var y = PADY + i*ROW;
+    var cy = y + ROW/2;
+    var isDir = r.node.type!=='file';
+    var isRoot = r.node.type==='root';
+
+    // connector lines
+    if(i>0){
+      h+='<line x1="'+(x-INDENT+8)+'" y1="'+(cy)+'"'
+        +' x2="'+(x+2)+'" y2="'+cy+'"'
+        +' stroke="#ccc" stroke-width="1"/>';
+      h+='<line x1="'+(x-INDENT+8)+'" y1="'+(PADY+(i-1)*ROW+ROW/2)+'"'
+        +' x2="'+(x-INDENT+8)+'" y2="'+cy+'"'
+        +' stroke="#ccc" stroke-width="1"/>';
+    }
+
+    // icon
+    var icon = isRoot ? '⬡' : isDir ? '▶' : '·';
+    var iconColor = isRoot?'#c0392b':isDir?'#3680b0':'#999';
+    h+='<text x="'+(x+4)+'" y="'+(cy+4)+'"'
+      +' font-family="sans-serif" font-size="11" fill="'+iconColor+'">'+icon+'</text>';
+
+    // label — link to GitHub
+    var ghUrl = isRoot
+      ? _repoHtmlUrl
+      : _repoHtmlUrl+'/'+(isDir?'tree':'blob')+'/'+encodeURIComponent(_repoBranch)+'/'+r.node.path;
+
+    h+='<a href="'+ghUrl+'" target="_blank">'
+      +'<text x="'+(x+18)+'" y="'+(cy+4)+'"'
+      +' font-family="\'Courier New\',monospace" font-size="12"'
+      +' fill="'+(isDir?'#202122':'#54595d')+'"'
+      +' font-weight="'+(isDir?'bold':'normal')+'">'
+      +esc(r.node.name)
+      +(r.node.size?' <tspan font-size="10" fill="#aaa">('+fmtSize(r.node.size)+')</tspan>':'')
+      +'</text></a>';
+
+    // row hover bg
+    h='<rect x="0" y="'+y+'" width="'+W+'" height="'+ROW+'"'
+      +' fill="'+(i%2===0?'#fafafa':'#f3f4f6')+'" rx="0"/>'+h;
+  });
+
+  svg.innerHTML = h;
+}
+
+function filterTree(){
+  if(!_treeRoot)return;
+  renderTreeSVG(G('tree-search').value||'');
+}
+
+function fmtSize(b){
+  if(!b)return '';
+  if(b<1024)return b+' B';
+  if(b<1048576)return (b/1024).toFixed(1)+' KB';
+  return (b/1048576).toFixed(1)+' MB';
+}
+
+/* ── keyboard ────────────────────────────────────────── */
+G('repo-input').addEventListener('keydown',function(e){if(e.key==='Enter')fetchRepo();});
+</script>
+</body>
+</html>
