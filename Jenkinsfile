@@ -2,14 +2,22 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_USER  = 'notsajeed'
-        BACKEND_IMAGE   = "${DOCKERHUB_USER}/repo-visualizer-backend"
-        FRONTEND_IMAGE  = "${DOCKERHUB_USER}/repo-visualizer-frontend"
-        SONAR_PROJECT   = 'repo-visualizer'
-        COMPOSE_FILE    = 'docker-compose.yml'
+        DOCKERHUB_USER = 'notsajeed'
+        BACKEND_IMAGE  = "${DOCKERHUB_USER}/repo-visualizer-backend"
+        FRONTEND_IMAGE = "${DOCKERHUB_USER}/repo-visualizer-frontend"
+        SONAR_PROJECT  = 'repo-visualizer'
+        COMPOSE_FILE   = 'docker-compose.yml'
     }
 
     stages {
+
+        stage('Version Check') {
+            steps {
+                sh 'git --version'
+                sh 'docker --version'
+                sh 'python3 --version'
+            }
+        }
 
         stage('Checkout') {
             steps {
@@ -17,7 +25,13 @@ pipeline {
             }
         }
 
-        stage('SonarQube Analysis') {
+        stage('Dependency Check') {
+            steps {
+                sh 'pip3 install -r requirements.txt --break-system-packages'
+            }
+        }
+
+        stage('Code Quality - SonarQube') {
             steps {
                 withSonarQubeEnv('SonarQube') {
                     sh """
@@ -43,7 +57,7 @@ pipeline {
         stage('Build Docker Images') {
             steps {
                 sh """
-                    docker build -f Dockerfile.backend -t ${BACKEND_IMAGE}:latest -t ${BACKEND_IMAGE}:${BUILD_NUMBER} .
+                    docker build -f Dockerfile.backend  -t ${BACKEND_IMAGE}:latest -t ${BACKEND_IMAGE}:${BUILD_NUMBER}  .
                     docker build -f Dockerfile.frontend -t ${FRONTEND_IMAGE}:latest -t ${FRONTEND_IMAGE}:${BUILD_NUMBER} .
                 """
             }
@@ -77,18 +91,17 @@ pipeline {
                 """
             }
         }
-
     }
 
     post {
         success {
-            echo "✅ Pipeline passed — frontend: http://localhost:3000  backend: http://localhost:5000"
+            echo "Pipeline passed — frontend: http://localhost:3000  backend: http://localhost:5000"
         }
         failure {
-            echo "❌ Pipeline failed — check logs above"
+            echo "Pipeline failed — check logs above"
         }
         always {
-            sh 'docker compose -f ${COMPOSE_FILE} ps'
+            sh "docker compose -f ${COMPOSE_FILE} ps"
         }
     }
 }
