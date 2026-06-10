@@ -15,7 +15,6 @@ pipeline {
             steps {
                 bat 'git --version'
                 bat 'docker --version'
-                bat 'python --version'
             }
         }
 
@@ -27,7 +26,7 @@ pipeline {
 
         stage('Dependency Check') {
             steps {
-                bat 'pip install -r requirements.txt'
+                bat 'python -m pip install -r requirements.txt'
             }
         }
 
