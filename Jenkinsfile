@@ -15,6 +15,7 @@ pipeline {
             steps {
                 bat 'git --version'
                 bat 'docker --version'
+                bat 'python --version'
             }
         }
 
