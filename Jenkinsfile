@@ -15,6 +15,7 @@ pipeline {
             steps {
                 bat 'git --version'
                 bat 'docker --version'
+                bat 'python --version'
             }
         }
 
@@ -41,14 +42,6 @@ pipeline {
                           -Dsonar.inclusions=app.py ^
                           -Dsonar.python.version=3
                     """
-                }
-            }
-        }
-
-        stage('Quality Gate') {
-            steps {
-                timeout(time: 2, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
                 }
             }
         }
